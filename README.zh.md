@@ -41,7 +41,7 @@ dsh plugin --profile desktop add github:superqin7/dsh-usage-meter
 固定版本安装：
 
 ```sh
-dsh plugin --profile web add github:superqin7/dsh-usage-meter#v1.1.1
+dsh plugin --profile web add github:superqin7/dsh-usage-meter#v1.2.1
 ```
 
 本地目录也可以：

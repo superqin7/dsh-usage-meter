@@ -118,11 +118,17 @@ function addUsage(target, usage) {
 
 /**
  * Add one event's contribution to a day-bucket map.
+ *
+ * Events below `firstOwnSeq` belong to a forked predecessor and are skipped:
+ * the child log carries the parent's prefix, so counting it again would bill
+ * the same tokens twice.
  * @param days - map of day key to day bucket.
  * @param event - one committed Session event.
  * @param holidays - holiday keys for peak classification.
+ * @param firstOwnSeq - lowest sequence number this Session actually authored.
  */
-function foldInto(days, event, holidays) {
+function foldInto(days, event, holidays, firstOwnSeq) {
+  if (typeof event?.seq === 'number' && event.seq < firstOwnSeq) return
   const type = event?.type
   if (type === 'turn/start' || type === 'step/start') {
     const key = dayKey(event.time)
@@ -276,17 +282,24 @@ async function daysOf(ctx, record, holidays) {
   const entry = folds.get(id)
 
   if (live !== undefined && live !== null) {
+    // A fork's log repeats its parent's prefix; only count what this Session
+    // authored itself.
+    const firstOwnSeq = Number(live.inheritedEventCount) || 0
     if (entry === undefined || !entry.live) {
-      const fresh = { live: true, cursor: 0, days: new Map() }
+      const fresh = { live: true, cursor: firstOwnSeq, days: new Map() }
       folds.set(id, fresh)
       const end = live.seq
-      for (const event of live.snapshotEvents(0, end)) foldInto(fresh.days, event, holidays)
+      for (const event of live.snapshotEvents(firstOwnSeq, end)) {
+        foldInto(fresh.days, event, holidays, firstOwnSeq)
+      }
       fresh.cursor = end
       return fresh.days
     }
     const end = live.seq
     if (end > entry.cursor) {
-      for (const event of live.snapshotEvents(entry.cursor, end)) foldInto(entry.days, event, holidays)
+      for (const event of live.snapshotEvents(entry.cursor, end)) {
+        foldInto(entry.days, event, holidays, firstOwnSeq)
+      }
       entry.cursor = end
     }
     return entry.days
@@ -299,8 +312,9 @@ async function daysOf(ctx, record, holidays) {
   if (pending !== undefined) return pending
   const read = (async () => {
     const snapshot = await ctx.sessionQuery.readSession(record.header.id)
+    const firstOwnSeq = Number(snapshot.inheritedEventCount) || 0
     const days = new Map()
-    for (const event of snapshot.events) foldInto(days, event, holidays)
+    for (const event of snapshot.events) foldInto(days, event, holidays, firstOwnSeq)
     folds.set(id, { live: false, cursor: snapshot.events.length, days })
     return days
   })()

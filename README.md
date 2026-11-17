@@ -41,7 +41,7 @@ dsh plugin --profile desktop add github:superqin7/dsh-usage-meter
 Pin a release:
 
 ```sh
-dsh plugin --profile web add github:superqin7/dsh-usage-meter#v1.1.1
+dsh plugin --profile web add github:superqin7/dsh-usage-meter#v1.2.1
 ```
 
 A local checkout works the same way:
