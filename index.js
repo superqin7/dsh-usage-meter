@@ -11,13 +11,13 @@
  * log cannot change until it becomes live again.
  */
 
-/** Services required before this plugin activates. */
+/** Services required before this plugin activates. Deliberately minimal: the
+ * route carrier, the Session corpus, and the live registry used to fold a
+ * running Session's tail incrementally. */
 export const inject = [
   'webServer',
   'sessionQuery',
   'sessions',
-  'sessionProjections',
-  'sessionProjectionCache',
 ]
 
 /** Fallback route when the patch omits one. */
