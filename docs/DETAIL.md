@@ -36,7 +36,7 @@ Host 端把每条带 `usage` 的 `assistant/message` 事件折叠进「本地日
   name: dsh-usage-meter
   config:
     currency: CNY
-    holidays: []
+    holidays: [2026-10-01]
     prices:
       deepseek-flash: { input: 2, cacheRead: 0.04, output: 8, offPeakRatio: 0.5 }
       qwen3.8-flash: { input: 0.8, cacheRead: 0.1, output: 2.7 }
@@ -47,14 +47,14 @@ Host 端把每条带 `usage` 的 `assistant/message` 事件折叠进「本地日
 
 **峰谷计价**：模型一旦写了 `offPeakRatio`，每条用量按**它自己的时间戳**判断峰谷，跨边界的会话也能正确拆分。内置时段与 DeepSeek 一致：`Asia/Shanghai`，周一至周五 09:00-12:00、14:00-18:00 为高峰；周末全天空闲。
 
-插件**不内置节假日日历**。DeepSeek 排除中国大陆法定节假日，想要精确就把日期填进 `holidays`；不填的话节假日周中会按高峰算。
+内置的 `holidays` 已包含中国大陆 2026、2027 年法定节假日（2027 为预排）。调休补班日不列入，因为官方规则只把周一至周五定义为高峰。
 
 ### 限制
 
 - **金额是估算，不是账单。** 不读发票，也不读账户余额。
 - **每个模型只有一张卡片。** 按长度分档（MiniMax-M3 超 512K）、批量折扣、优先档，一律按标准刊例价算。
 - **不算非 token 成本。** 图片输出、搜索调用、文件解析、存储都不在此列。
-- **路由没有鉴权。** 本机任意进程可读 token 总量、会话数和有用量会话的工作目录 —— 读不到对话内容。
+- **路由只响应本机（回环）调用**，除非设 `allowRemote: true`。可读 token 总量、会话数和有用量会话的工作目录 —— 读不到对话内容。
 - **历史跟着日志走。** 不建数据库；删掉会话数据，统计随之消失。
 
 ---
@@ -84,12 +84,12 @@ Cost comes from the rate table in the plugin config, in currency units **per one
 
 **Peak and off-peak**: when a model sets `offPeakRatio`, every usage record is classified by its own timestamp, so a session spanning a boundary is split correctly. The shipped schedule matches DeepSeek's: `Asia/Shanghai`, Monday to Friday, 09:00-12:00 and 14:00-18:00 are peak; weekends are off-peak all day.
 
-**No holiday calendar ships with the plugin.** DeepSeek excludes Chinese public holidays from peak; add them to `holidays` for exact numbers.
+The shipped `holidays` list covers mainland China's 2026 and 2027 public holidays (2027 is provisional). Adjusted make-up workdays are excluded, because the published rule only names Monday to Friday as peak.
 
 ### Limitations
 
 - **The cost is an estimate, not a bill.** It reads no invoice and no account balance.
 - **One card per model.** Length-tiered pricing, batch discounts, and priority tiers are all priced at the standard listed rate.
 - **No non-token cost.** Image output, search calls, file parsing, and storage are invisible here.
-- **The route is unauthenticated.** Any local process can read token totals, session counts, and the working directories of sessions with usage — not conversation content.
+- **The route answers loopback callers only** unless `allowRemote: true`. It exposes token totals, session counts, and the working directories of sessions with usage — not conversation content.
 - **History follows the logs.** No database; delete session data and the totals drop with it.

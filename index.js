@@ -384,12 +384,15 @@ async function summarize(ctx, config) {
   let todayCost = null
   const models = []
   const rates = {}
+  const unpriced = new Set(Array.isArray(config?.unpricedModels) ? config.unpricedModels : [])
   for (const [model, usage] of todayModels) {
-    const card = cardFor(config, model)
+    // A self-hosted deployment has no public rate; it reports no cost rather
+    // than inheriting a fallback card that would invent one.
+    const card = unpriced.has(model) ? null : cardFor(config, model)
     const cost = costOf(usage, card)
     if (cost !== null) todayCost = (todayCost ?? 0) + cost
     rates[model] = card === null ? null : { ...card.peak, offPeakRatio: card.offPeakRatio }
-    models.push({ model, ...aggregate(usage, card) })
+    models.push({ model, priced: cost !== null, ...aggregate(usage, card) })
   }
   models.sort((left, right) => right.tokens - left.tokens)
 
@@ -406,6 +409,18 @@ async function summarize(ctx, config) {
     allTime: { sessions: records.length, ...aggregate(allTimeTotal, null) },
     models,
   }
+}
+
+/**
+ * Whether a socket address belongs to the local machine.
+ * @param address - `req.socket.remoteAddress`, possibly undefined.
+ * @returns true for IPv4/IPv6 loopback forms.
+ */
+function isLoopback(address) {
+  if (typeof address !== 'string' || address === '') return false
+  if (address === '::1' || address === '127.0.0.1') return true
+  if (address.startsWith('127.')) return true
+  return address.startsWith('::ffff:127.')
 }
 
 /**
@@ -435,6 +450,14 @@ export function apply(ctx, config) {
         res.statusCode = 405
         res.setHeader('Allow', 'GET, HEAD')
         res.end()
+        return
+      }
+      // The summary names working directories, so it answers loopback callers
+      // only unless the owner explicitly opts into remote access.
+      if (config?.allowRemote !== true && !isLoopback(req.socket?.remoteAddress)) {
+        res.statusCode = 403
+        res.setHeader('Content-Type', 'application/json; charset=utf-8')
+        res.end(JSON.stringify({ error: 'loopback only; set allowRemote: true to serve other peers' }))
         return
       }
       try {

@@ -4,19 +4,93 @@
       config:
         route: /plugin/usage-meter/summary
         currency: CNY
+        # The summary names working directories, so it answers loopback callers
+        # only. Set true to serve other peers.
+        allowRemote: false
         # Fallback cache-hit price as a fraction of the input price, used only
         # for a model whose card omits `cacheRead`.
         cacheReadRatio: 0.1
-        # Dates in Asia/Shanghai that count as off-peak all day. The plugin
-        # ships no holiday calendar; add Chinese public holidays here yourself.
-        holidays: []
+        # Mainland China public holidays, which DeepSeek excludes from its peak
+        # tariff. Sourced from the annual State Council schedule; the 2027 list
+        # is provisional until that notice is published. Weekday holidays are
+        # priced off-peak all day; adjusted make-up workdays are intentionally
+        # absent, because the published rule only names Mon-Fri as peak.
+        holidays:
+          # 2026
+          - 2026-01-01
+          - 2026-01-02
+          - 2026-01-03
+          - 2026-02-15
+          - 2026-02-16
+          - 2026-02-17
+          - 2026-02-18
+          - 2026-02-19
+          - 2026-02-20
+          - 2026-02-21
+          - 2026-02-22
+          - 2026-02-23
+          - 2026-04-04
+          - 2026-04-05
+          - 2026-04-06
+          - 2026-05-01
+          - 2026-05-02
+          - 2026-05-03
+          - 2026-05-04
+          - 2026-05-05
+          - 2026-06-19
+          - 2026-06-20
+          - 2026-06-21
+          - 2026-09-25
+          - 2026-09-26
+          - 2026-09-27
+          - 2026-10-01
+          - 2026-10-02
+          - 2026-10-03
+          - 2026-10-04
+          - 2026-10-05
+          - 2026-10-06
+          - 2026-10-07
+          # 2027
+          - 2027-01-01
+          - 2027-01-02
+          - 2027-01-03
+          - 2027-02-05
+          - 2027-02-06
+          - 2027-02-07
+          - 2027-02-08
+          - 2027-02-09
+          - 2027-02-10
+          - 2027-02-11
+          - 2027-02-12
+          - 2027-02-13
+          - 2027-04-03
+          - 2027-04-04
+          - 2027-04-05
+          - 2027-05-01
+          - 2027-05-02
+          - 2027-05-03
+          - 2027-05-04
+          - 2027-05-05
+          - 2027-06-09
+          - 2027-09-15
+          - 2027-10-01
+          - 2027-10-02
+          - 2027-10-03
+          - 2027-10-04
+          - 2027-10-05
+          - 2027-10-06
+          - 2027-10-07
+        # Models with no public price. They report tokens but no cost, instead
+        # of inheriting `defaultPrice` and inventing a number.
+        unpricedModels:
+          - nvidia/Qwen3.6-35B-A3B-NVFP4
+          - Qwen/Qwen3.8-27B-FP8
         # Rates are CNY per one million tokens, taken from each vendor's public
         # price list (verified 2026-11-17). `input` is the cache-MISS rate.
         # `offPeakRatio` applies outside peak windows: Asia/Shanghai, Mon-Fri,
         # 09:00-12:00 and 14:00-18:00. Omit it for a flat tariff.
         prices:
           # DeepSeek — https://api-docs.deepseek.com/zh-cn/quick_start/pricing
-          # peak: hit 0.04 / miss 2 / out 8; off-peak is half.
           deepseek-flash: { input: 2, cacheRead: 0.04, output: 8, offPeakRatio: 0.5 }
           deepseek-v4-pro: { input: 9, cacheRead: 0.3, output: 27, offPeakRatio: 0.5 }
           # Alibaba Bailian (华北2 北京) — https://help.aliyun.com/zh/model-studio/qwen3-8-flash
@@ -33,7 +107,5 @@
           MiniMax-M3: { input: 2.1, cacheRead: 0.42, output: 8.4 }
           # Prompt enhancement for H3-Image; input-only, no output charge.
           MiniMax-H3-Image-PE: { input: 15, cacheRead: 0, output: 0 }
-        # Any model missing from `prices` falls back to this card, so the meter
-        # always reports a cost. Self-hosted models have no public rate; set
-        # their real cost here or leave the fallback.
+        # Any model missing from `prices` falls back to this card.
         defaultPrice: { input: 2, cacheRead: 0.04, output: 8, offPeakRatio: 0.5 }

@@ -221,7 +221,7 @@ window.__ModuleLoader__.load({
         '.dsh-usage-meter-row{display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--dsw-alias-border-subtle,rgba(128,128,128,.14))}',
         '.dsh-usage-meter-model{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
         '.dsh-usage-meter-tokens{font-variant-numeric:tabular-nums;opacity:.75;white-space:nowrap}',
-        '.dsh-usage-meter-money{font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap;min-width:58px;text-align:right}',
+        '.dsh-usage-meter-money{font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap;min-width:86px;text-align:right}',
         '.dsh-usage-meter-error{color:var(--dsw-alias-status-danger,#c0392b);line-height:1.5}',
       ].join('\n'))
     }
@@ -319,7 +319,9 @@ window.__ModuleLoader__.load({
               key: entry.model,
               model: entry.model,
               tokens: entry.tokens,
-              cost: formatCost(entry.cost, currency),
+              cost: entry.priced === false
+                ? translate('panel.unpricedModel', '自建 · 未定价')
+                : formatCost(entry.cost, currency),
             }))
           }
         }
@@ -355,6 +357,7 @@ window.__ModuleLoader__.load({
         'panel.output': 'Output',
         'panel.byModel': 'By model (today)',
         'panel.unpriced': 'No price configured for these models.',
+        'panel.unpricedModel': 'unpriced',
       },
       zh: {
         'entry.today': '今日消耗token：',
@@ -373,6 +376,7 @@ window.__ModuleLoader__.load({
         'panel.output': '输出',
         'panel.byModel': '按模型（今日）',
         'panel.unpriced': '部分模型未配置价格。',
+        'panel.unpricedModel': '自建 · 未定价',
       },
     }
 

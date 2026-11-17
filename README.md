@@ -62,11 +62,10 @@ The plugin config lives in `cordis.patch.yml` beside the package. Rates are **cu
   config:
     route: /plugin/usage-meter/summary
     currency: CNY
-    # Cache reads are not always quoted by a provider. A model without an
-    # explicit `cacheRead` is priced at this fraction of its input rate.
-    cacheReadRatio: 0.1
-    # Dates in Asia/Shanghai that count as off-peak all day (public holidays).
-    holidays: []
+    allowRemote: false          # serve loopback callers only
+    cacheReadRatio: 0.1         # fallback when a card omits cacheRead
+    holidays: ["2026-10-01"]    # Asia/Shanghai dates priced off-peak all day
+    unpricedModels: ["my-private-model"]
     prices:
       deepseek-flash:
         input: 2          # cache-miss input, peak tariff
@@ -78,17 +77,19 @@ The plugin config lives in `cordis.patch.yml` beside the package. Rates are **cu
         cacheRead: 0.1
         output: 2.7
     # Fallback for models missing from `prices`.
-    defaultPrice: { input: 2, output: 8 }
+    defaultPrice: { input: 2, cacheRead: 0.04, output: 8, offPeakRatio: 0.5 }
 ```
 
 | Key | Meaning |
 |---|---|
 | `route` | Exact HTTP path for the JSON summary |
 | `currency` | Display symbol: `CNY`, `USD`, `EUR`, or anything else (no symbol) |
+| `allowRemote` | Serve non-loopback callers; defaults to `false` |
 | `prices` | Per-model `input` / `output`, plus optional `cacheRead` / `cacheWrite` |
 | `prices.*.offPeakRatio` | Multiplier applied to every rate outside peak windows; defaults to `1` |
 | `cacheReadRatio` | Cache-read price as a fraction of the input price, when a model omits `cacheRead` |
 | `holidays` | `YYYY-MM-DD` dates treated as off-peak all day |
+| `unpricedModels` | Models that report tokens but no cost, instead of inheriting `defaultPrice` |
 | `defaultPrice` | Card used for models absent from `prices` |
 
 ### Peak and off-peak tariffs
@@ -103,8 +104,7 @@ any date in `holidays`. Models that do not set `offPeakRatio` ignore the
 schedule entirely.
 
 DeepSeek publishes off-peak as half of peak (`offPeakRatio: 0.5`), and excludes
-Chinese public holidays — add them to `holidays` yourself; the plugin ships no
-holiday calendar.
+The shipped `holidays` list covers mainland China's public holidays for **2026 and 2027**, which is what DeepSeek excludes from its peak tariff. The 2027 dates are provisional until the State Council publishes that year's schedule; update the list when it does. Adjusted make-up workdays are deliberately absent, because the published rule only names Monday to Friday as peak.
 
 ### Shipped rates (verified 2026-11-17)
 
@@ -135,7 +135,7 @@ Caveats on the table above:
 
 - **MiniMax-M3 is length-tiered, not flat.** Inputs above 512K tokens cost double (¥4.2 / ¥0.84 / ¥16.8). The plugin prices every call at the ≤512K rate, so a session that pushes a very long prompt is undercounted. The figure is also the current 50%-off promotional list price.
 - **MiniMax-H3-Image-PE is not a public model id.** It maps to MiniMax's `H3-Image-Context-IR` prompt-enhancement billing: input only, no output charge, no cache tier.
-- **Self-hosted models have no public price.** `nvidia/Qwen3.6-35B-A3B-NVFP4` and `Qwen/Qwen3.8-27B-FP8` are private deployments; the meter falls back to `defaultPrice`. Set their real cost, or delete the fallback to show `—`.
+- **Self-hosted models are sold no public rate.** `nvidia/Qwen3.6-35B-A3B-NVFP4` and `Qwen/Qwen3.8-27B-FP8` are private deployments, so they are listed in `unpricedModels`: they show tokens and no cost rather than borrowing a fallback card and inventing one.
 - **`kimi-k3` cache writes** are quoted separately (¥20 for 5-minute, ¥40 for 1-hour). The card uses the input rate, which matches the 5-minute tier.
 
 ### Two details worth knowing
@@ -187,7 +187,7 @@ cost = (peak + off × offPeakRatio) / 1e6
 - **The cost is an estimate.** It never reads a provider invoice or account balance, and it cannot reconcile against one.
 - **No non-token cost.** Image generation, storage, per-request fees, and anything billed outside token counts are invisible here.
 - **One card per model, one currency.** No peak/off-peak tiers, no per-request minimums.
-- **The route is unauthenticated.** It binds wherever the Harness web server binds (loopback by default) and any local process can read it. It exposes session counts, working directories of sessions with usage, and token totals — not conversation content. Change `route` if that matters.
+- **The route answers loopback callers only** unless `allowRemote: true`. It exposes session counts, working directories of sessions with usage, and token totals — not conversation content.
 - **History is not retained.** The plugin keeps no database; it recomputes from session logs, so the numbers follow the logs. Delete session data and the totals drop with it.
 - **Windows, macOS, and Linux behave the same**, as long as `node` runs the Harness.
 
