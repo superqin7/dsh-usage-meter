@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "Token 用量统计",
+    "description": "显示 Harness 今天消耗了多少 token、大约花了多少钱。侧边栏底部是一个翻页计数器，点开是统计面板：今日 token、预估花费、缓存命中情况，以及按模型的明细。价格来自插件配置。",
+    "detail": "docs/DETAIL.md"
+  }
+}

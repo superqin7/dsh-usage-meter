@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "Token usage meter",
+    "description": "Shows how many tokens the Harness spent today and what they cost. A compact flip-counter reading at the sidebar foot opens a panel with today's tokens, the estimated cost, cache-hit figures and a per-model breakdown. Prices come from the plugin config.",
+    "detail": "docs/DETAIL.md"
+  }
+}
