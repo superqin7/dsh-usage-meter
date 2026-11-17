@@ -1,5 +1,7 @@
 # dsh-usage-meter
 
+**English** | [简体中文](README.zh.md)
+
 A token usage and cost meter for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness).
 
 Today's token count sits at the sidebar foot as a split-flap counter. One click opens a panel with the estimated cost, the cache-hit figures, and a per-model breakdown for the day.
@@ -29,7 +31,17 @@ Everything is computed from the session logs Harness already writes. The plugin 
 Requires DeepSeek Harness 0.2.x and a profile to install into.
 
 ```sh
+# Web build
 dsh plugin --profile web add github:superqin7/dsh-usage-meter
+
+# Desktop build (its bundled CLI, desktop profile)
+dsh plugin --profile desktop add github:superqin7/dsh-usage-meter
+```
+
+Pin a release:
+
+```sh
+dsh plugin --profile web add github:superqin7/dsh-usage-meter#v1.1.1
 ```
 
 A local checkout works the same way:
@@ -38,7 +50,7 @@ A local checkout works the same way:
 dsh plugin --profile web add /absolute/path/to/dsh-usage-meter
 ```
 
-Restart `dsh web` after installing or updating. The Desktop app uses its bundled CLI and the `desktop` profile.
+Restart `dsh web` (or the desktop app) after installing or updating. Client-side changes also need one **page reload** before they appear.
 
 ## Configure prices
 
@@ -153,6 +165,22 @@ peak = uncachedInput_p × input + cacheRead_p × cacheRead + cacheWrite_p × cac
 off  = uncachedInput_o × input + cacheRead_o × cacheRead + cacheWrite_o × cacheWrite + output_o × output
 cost = (peak + off × offPeakRatio) / 1e6
 ```
+
+## Troubleshooting
+
+1. **The sidebar shows `—`.** The Client cannot read the summary. Find the web port (`dsh web` prints it at startup) and hit the route directly:
+
+   ```sh
+   curl http://127.0.0.1:<port>/plugin/usage-meter/summary
+   ```
+
+   `200` with JSON means the Host half is fine. A `500` carries `{"error": "..."}` explaining why.
+
+2. **Every cost is `—`.** The model id is not in `prices` and there is no `defaultPrice`. Read `models[].model` out of the JSON and copy that exact id into the config.
+
+3. **A price change had no effect.** Prices are applied per request and take effect immediately. `holidays` is different: peak classification is folded into cached buckets, so changing it rebuilds them on the next request — restart the plugin if you want to be certain.
+
+4. **The estimate looks too high.** Check `cacheRead` first. Cache hits are the overwhelming majority of tokens, so an error there dominates the total.
 
 ## Limitations
 

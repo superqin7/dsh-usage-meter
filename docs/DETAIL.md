@@ -1,29 +1,35 @@
-# Token usage meter
+# Token 用量统计 / Token usage meter
 
-Answers one question: how many tokens has this Harness spent today, and roughly what did they cost.
+**简体中文** | [English](#english)
 
-## Where it shows up
+---
 
-- **Sidebar foot** — a split-flap counter: `79,825,490`. In the collapsed rail only the glyph remains. Digits flip like an old calendar; only the positions that changed move, rightmost first.
-- **Click it** — a panel opens above the sidebar foot with:
-  - today's token count, as flip digits
-  - the estimated cost
-  - cache hit rate, input, output, and cache reads
-  - one row per model used today: name, token count, cost
+## 简体中文
 
-Nothing is rendered in the conversation flow.
+回答一个问题：今天这个 Harness 花了多少 token，大概多少钱。
 
-## Where the numbers come from
+### 显示在哪
 
-The Host half folds every `assistant/message` event that carries `usage` into buckets keyed by local day, model, and peak/off-peak tariff. The four usage buckets are disjoint: uncached input, cache read, cache write, and output.
+- **侧边栏底部** —— 一个翻页计数器：`今日消耗token：79,825,490`。侧边栏收起成 56px 窄轨时只留图标。只有变化的那几位数字会翻，个位先翻、往左错峰。
+- **点一下** —— 在侧边栏底部上方展开面板：
+  - 今日 token（翻页大字）
+  - 预估花费
+  - 缓存命中率 / 输入 / 输出 / 缓存命中数
+  - 按模型（今日）一行一个：模型名、token 数、花费
 
-Live sessions are folded incrementally from the in-memory log — only the new tail is read per request. A cold session is read once through `sessionQuery.readSession` and then cached, because a finished log cannot change until that session becomes live again.
+对话流里不渲染任何东西。
 
-The summary is served as JSON on `GET /plugin/usage-meter/summary`, and the Client polls it every four seconds.
+### 数字从哪来
 
-## Cost
+Host 端把每条带 `usage` 的 `assistant/message` 事件折叠进「本地日 × 模型 × 峰谷」分桶。四个桶互不重叠：未命中输入、缓存命中读、缓存写入、输出。
 
-Cost comes from the rate table in the plugin config, in currency units **per one million tokens**, with `input` meaning the cache-miss rate:
+活跃会话增量折叠，只读新增的日志尾巴；已结束的会话读一次就缓存，因为完成的日志在它重新变活之前不会变。
+
+汇总挂在 `GET /plugin/usage-meter/summary` 上，Client 每 4 秒轮询。
+
+### 费用
+
+费用来自插件配置里的费率表，单位是**每百万 token**，`input` 指缓存未命中的输入价：
 
 ```yaml
 - id: usage-meter
@@ -37,24 +43,53 @@ Cost comes from the rate table in the plugin config, in currency units **per one
     defaultPrice: { input: 2, cacheRead: 0.04, output: 8, offPeakRatio: 0.5 }
 ```
 
-A model that omits `cacheRead` falls back to `cacheReadRatio` × its input rate.
+模型没写 `cacheRead` 时，按 `cacheReadRatio` × 输入价兜底。
 
-### Peak and off-peak tariffs
+**峰谷计价**：模型一旦写了 `offPeakRatio`，每条用量按**它自己的时间戳**判断峰谷，跨边界的会话也能正确拆分。内置时段与 DeepSeek 一致：`Asia/Shanghai`，周一至周五 09:00-12:00、14:00-18:00 为高峰；周末全天空闲。
 
-Each usage record is classified by **its own timestamp**, not at request time, so a session that spans a peak boundary is split correctly. The shipped schedule matches DeepSeek's: **Asia/Shanghai, Monday to Friday, 09:00-12:00 and 14:00-18:00** are peak; weekends are off-peak all day; so is any date in `holidays`.
+插件**不内置节假日日历**。DeepSeek 排除中国大陆法定节假日，想要精确就把日期填进 `holidays`；不填的话节假日周中会按高峰算。
 
-Models without `offPeakRatio` ignore the schedule entirely.
+### 限制
 
-The plugin ships **no holiday calendar**. DeepSeek excludes Chinese public holidays from peak, so add them to `holidays` for exact numbers; without them, a holiday weekday is priced at peak rates.
+- **金额是估算，不是账单。** 不读发票，也不读账户余额。
+- **每个模型只有一张卡片。** 按长度分档（MiniMax-M3 超 512K）、批量折扣、优先档，一律按标准刊例价算。
+- **不算非 token 成本。** 图片输出、搜索调用、文件解析、存储都不在此列。
+- **路由没有鉴权。** 本机任意进程可读 token 总量、会话数和有用量会话的工作目录 —— 读不到对话内容。
+- **历史跟着日志走。** 不建数据库；删掉会话数据，统计随之消失。
 
-### Cache reads dominate a long session
+---
 
-More than 95% of prompt-side tokens are typically cache hits, so the cache-hit rate drives the estimate: it can be one-fiftieth of the input rate. Getting it wrong by a factor of five is a bigger error than any other mistake in the table.
+## English
 
-## Limitations
+Answers one question: how many tokens has this Harness spent today, and roughly what did they cost.
 
-- **The cost is an estimate.** It never reads a provider invoice or account balance, and it cannot reconcile against one.
-- **One card per model.** Length-tiered pricing (MiniMax-M3 above 512K input), batch discounts, and priority tiers are all priced as the standard listed rate.
-- **No non-token cost.** Image output, search calls, file parsing, storage, and per-request fees are invisible here.
-- **The route is unauthenticated.** It binds wherever the Harness web server binds and any local process can read token totals, session counts, and the working directories of sessions with usage — not conversation content.
-- **History follows the logs.** The plugin keeps no database; delete session data and the totals drop with it.
+### Where it shows up
+
+- **Sidebar foot** — a split-flap counter: `Today: 79,825,490`. In the collapsed 56px rail only the glyph remains. Only the digit positions that changed flip, rightmost first.
+- **Click it** — a panel opens above the sidebar foot with today's tokens as flip digits, the estimated cost, cache hit rate, input, output, cache reads, and one row per model used today.
+
+Nothing is rendered in the conversation flow.
+
+### Where the numbers come from
+
+The Host folds every `assistant/message` event that carries `usage` into buckets keyed by local day, model, and peak/off-peak tariff. The four buckets are disjoint: uncached input, cache read, cache write, and output.
+
+Live sessions are folded incrementally — only the new tail is read per request. A cold session is read once and cached, because a finished log cannot change until that session becomes live again.
+
+The summary is served on `GET /plugin/usage-meter/summary`, and the Client polls it every four seconds.
+
+### Cost
+
+Cost comes from the rate table in the plugin config, in currency units **per one million tokens**, with `input` meaning the cache-miss rate. A model that omits `cacheRead` falls back to `cacheReadRatio` × its input rate.
+
+**Peak and off-peak**: when a model sets `offPeakRatio`, every usage record is classified by its own timestamp, so a session spanning a boundary is split correctly. The shipped schedule matches DeepSeek's: `Asia/Shanghai`, Monday to Friday, 09:00-12:00 and 14:00-18:00 are peak; weekends are off-peak all day.
+
+**No holiday calendar ships with the plugin.** DeepSeek excludes Chinese public holidays from peak; add them to `holidays` for exact numbers.
+
+### Limitations
+
+- **The cost is an estimate, not a bill.** It reads no invoice and no account balance.
+- **One card per model.** Length-tiered pricing, batch discounts, and priority tiers are all priced at the standard listed rate.
+- **No non-token cost.** Image output, search calls, file parsing, and storage are invisible here.
+- **The route is unauthenticated.** Any local process can read token totals, session counts, and the working directories of sessions with usage — not conversation content.
+- **History follows the logs.** No database; delete session data and the totals drop with it.

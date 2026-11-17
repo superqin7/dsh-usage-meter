@@ -257,6 +257,12 @@ function aggregate(buckets, card) {
  */
 const folds = new Map()
 
+/** Holiday set the current folds were built with; a change rebuilds them. */
+let foldsHolidaySignature = null
+
+/** Cold reads in flight, so concurrent polls share one log read per Session. */
+const coldReads = new Map()
+
 /**
  * Current day buckets for one Session, folding only what has not been counted.
  * @param ctx - host context.
@@ -287,12 +293,20 @@ async function daysOf(ctx, record, holidays) {
   }
 
   // Cold: a completed log cannot change, so fold it once and keep it.
+  // Overlapping polls share one read instead of each replaying the whole log.
   if (entry !== undefined && !entry.live) return entry.days
-  const snapshot = await ctx.sessionQuery.readSession(record.header.id)
-  const days = new Map()
-  for (const event of snapshot.events) foldInto(days, event, holidays)
-  folds.set(id, { live: false, cursor: snapshot.events.length, days })
-  return days
+  const pending = coldReads.get(id)
+  if (pending !== undefined) return pending
+  const read = (async () => {
+    const snapshot = await ctx.sessionQuery.readSession(record.header.id)
+    const days = new Map()
+    for (const event of snapshot.events) foldInto(days, event, holidays)
+    folds.set(id, { live: false, cursor: snapshot.events.length, days })
+    return days
+  })()
+  coldReads.set(id, read)
+  read.then(() => coldReads.delete(id), () => coldReads.delete(id))
+  return read
 }
 
 /**
@@ -322,6 +336,14 @@ async function summarize(ctx, config) {
   const records = await ctx.sessionQuery.listSessions()
   const today = dayKey(Date.now())
   const holidays = new Set(Array.isArray(config?.holidays) ? config.holidays : [])
+  // Peak classification is folded into the cached buckets, so a changed holiday
+  // set invalidates every fold. Prices are applied per request from the current
+  // config and need no invalidation.
+  const holidaySignature = [...holidays].sort().join(',')
+  if (holidaySignature !== foldsHolidaySignature) {
+    folds.clear()
+    foldsHolidaySignature = holidaySignature
+  }
   const todayTotal = { peak: emptyUsage(), off: emptyUsage() }
   const allTimeTotal = { peak: emptyUsage(), off: emptyUsage() }
   const todayModels = new Map()
@@ -397,7 +419,13 @@ export function apply(ctx, config) {
     : DEFAULT_ROUTE
   ctx.effect(() => {
     folds.clear()
-    return () => folds.clear()
+    coldReads.clear()
+    foldsHolidaySignature = null
+    return () => {
+      folds.clear()
+      coldReads.clear()
+      foldsHolidaySignature = null
+    }
   }, 'dsh-usage-meter: fold cache')
   ctx.effect(() => ctx.webServer.register({
     kind: 'exact',
