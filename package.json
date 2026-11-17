@@ -18,6 +18,10 @@
     "url": "git+https://github.com/superqin7/dsh-usage-meter.git"
   },
   "homepage": "https://github.com/superqin7/dsh-usage-meter#readme",
+  "engines": {
+    "dsh": ">=0.2.0-rc.1 <0.3.0-0",
+    "node": ">=20"
+  },
   "exports": {
     ".": "./index.js",
     "./client": "./client.js",

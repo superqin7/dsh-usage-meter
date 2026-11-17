@@ -4,23 +4,16 @@
       config:
         route: /plugin/usage-meter/summary
         currency: CNY
-        # Cache reads are not quoted in the source price table, which lists
-        # input/output only. A model without an explicit `cacheRead` is priced
-        # at this fraction of its input rate.
+        # Cache reads are not always quoted by a provider. A model without an
+        # explicit `cacheRead` is priced at this fraction of its input rate.
         cacheReadRatio: 0.1
-        # Rates are currency units per one million tokens, taken from the
-        # account's model price list (quoted there as "input / output").
+        # Rates are currency units per one million tokens, written as
+        # { input, output }. The entry below is an EXAMPLE: replace it with the
+        # rates your own provider charges. Any model you leave out falls back to
+        # `defaultPrice`, so the meter always reports a cost.
         prices:
           deepseek-flash: { input: 2, output: 8 }
-          'MiniMax-H3-Image-PE': { input: 1.8, output: 10.8 }
-          'nvidia/Qwen3.6-35B-A3B-NVFP4': { input: 1.8, output: 10.8 }
-          'Qwen/Qwen3.8-27B-FP8': { input: 3, output: 12 }
-          qwen3.8-27b: { input: 3, output: 12 }
-          qwen3.8-flash: { input: 0.8, output: 2.7 }
-          qwen3.8-max: { input: 12, output: 36 }
-          MiniMax-M3: { input: 2.1, output: 8.4 }
-          glm-5.3-flash: { input: 0.8, output: 2.8 }
-          glm-5.3: { input: 8, output: 28 }
-          kimi-k3: { input: 20, output: 100 }
-        # Any model missing from the table falls back to this card.
+        # Fallback card for every model absent from `prices`. Set it to your
+        # provider's rates, or remove both `prices` and this key to show tokens
+        # only and report "—" for cost.
         defaultPrice: { input: 2, output: 8 }
