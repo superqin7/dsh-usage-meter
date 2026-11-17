@@ -53,9 +53,18 @@ The plugin config lives in `cordis.patch.yml` beside the package. Rates are **cu
     # Cache reads are not always quoted by a provider. A model without an
     # explicit `cacheRead` is priced at this fraction of its input rate.
     cacheReadRatio: 0.1
+    # Dates in Asia/Shanghai that count as off-peak all day (public holidays).
+    holidays: []
     prices:
-      deepseek-flash: { input: 2, output: 8 }
-      # Any model id the events report can be listed here.
+      deepseek-flash:
+        input: 2          # cache-miss input, peak tariff
+        cacheRead: 0.04   # cache-hit input, peak tariff
+        output: 8         # output, peak tariff
+        offPeakRatio: 0.5 # off-peak multiplier; omit for a flat tariff
+      qwen3.8-flash:
+        input: 0.8
+        cacheRead: 0.1
+        output: 2.7
     # Fallback for models missing from `prices`.
     defaultPrice: { input: 2, output: 8 }
 ```
@@ -63,19 +72,68 @@ The plugin config lives in `cordis.patch.yml` beside the package. Rates are **cu
 | Key | Meaning |
 |---|---|
 | `route` | Exact HTTP path for the JSON summary |
-| `currency` | `CNY`, `USD`, `EUR`, or anything else (no symbol) |
+| `currency` | Display symbol: `CNY`, `USD`, `EUR`, or anything else (no symbol) |
 | `prices` | Per-model `input` / `output`, plus optional `cacheRead` / `cacheWrite` |
-| `cacheReadRatio` | Cache-read price as a fraction of the input price |
+| `prices.*.offPeakRatio` | Multiplier applied to every rate outside peak windows; defaults to `1` |
+| `cacheReadRatio` | Cache-read price as a fraction of the input price, when a model omits `cacheRead` |
+| `holidays` | `YYYY-MM-DD` dates treated as off-peak all day |
 | `defaultPrice` | Card used for models absent from `prices` |
 
-Two details worth knowing:
+### Peak and off-peak tariffs
 
-- **Cache reads dominate a long session.** In practice more than 95% of prompt-side tokens are cache hits, so `cacheRead` (and therefore `cacheReadRatio`) moves the total far more than `output` does. If your provider publishes an explicit cache-hit price, set `cacheRead` per model instead of relying on the ratio.
+Some providers bill by time of day. When a model sets `offPeakRatio`, every
+usage record is classified by **its own timestamp** rather than at request time,
+so a session that spans a boundary is split correctly.
+
+The shipped schedule matches DeepSeek's: **Asia/Shanghai, Monday to Friday,
+09:00-12:00 and 14:00-18:00** are peak. Weekends are off-peak all day, and so is
+any date in `holidays`. Models that do not set `offPeakRatio` ignore the
+schedule entirely.
+
+DeepSeek publishes off-peak as half of peak (`offPeakRatio: 0.5`), and excludes
+Chinese public holidays — add them to `holidays` yourself; the plugin ships no
+holiday calendar.
+
+### Shipped rates (verified 2026-11-17)
+
+These are each vendor's **public list price**, in CNY per one million tokens. They are the defaults this repository ships, so the meter reports a real cost without any setup.
+
+| Model | Input (cache miss) | Cache hit | Output | Tariff |
+|---|---|---|---|---|
+| `deepseek-flash` | ¥2 | ¥0.04 | ¥8 | peak / off-peak 0.5× |
+| `deepseek-v4-pro` | ¥9 | ¥0.30 | ¥27 | peak / off-peak 0.5× |
+| `qwen3.8-flash` | ¥0.8 | ¥0.1 | ¥2.7 | flat |
+| `qwen3.8-27b` | ¥3 | ¥0.6 | ¥12 | flat |
+| `qwen3.8-max` | ¥12 | ¥1.5 | ¥36 | flat |
+| `glm-5.3-flash` | ¥0.8 | ¥0.23 | ¥2.8 | flat |
+| `glm-5.3` | ¥8 | ¥2 | ¥28 | flat |
+| `kimi-k3` | ¥20 | ¥2 | ¥100 | flat |
+| `MiniMax-M3` | ¥2.1 | ¥0.42 | ¥8.4 | flat (see caveat) |
+| `MiniMax-H3-Image-PE` | ¥15 | — | — | input only |
+
+Sources:
+
+- DeepSeek — <https://api-docs.deepseek.com/zh-cn/quick_start/pricing>
+- Alibaba Bailian (华北2 北京) — `help.aliyun.com/zh/model-studio/qwen3-8-{flash,max,27b}`
+- Zhipu — <https://docs.bigmodel.cn/cn/guide/start/pricing>
+- Moonshot — <https://platform.kimi.com/docs/pricing/chat>
+- MiniMax — <https://platform.minimax.cn/docs/pricing/overview>
+
+Caveats on the table above:
+
+- **MiniMax-M3 is length-tiered, not flat.** Inputs above 512K tokens cost double (¥4.2 / ¥0.84 / ¥16.8). The plugin prices every call at the ≤512K rate, so a session that pushes a very long prompt is undercounted. The figure is also the current 50%-off promotional list price.
+- **MiniMax-H3-Image-PE is not a public model id.** It maps to MiniMax's `H3-Image-Context-IR` prompt-enhancement billing: input only, no output charge, no cache tier.
+- **Self-hosted models have no public price.** `nvidia/Qwen3.6-35B-A3B-NVFP4` and `Qwen/Qwen3.8-27B-FP8` are private deployments; the meter falls back to `defaultPrice`. Set their real cost, or delete the fallback to show `—`.
+- **`kimi-k3` cache writes** are quoted separately (¥20 for 5-minute, ¥40 for 1-hour). The card uses the input rate, which matches the 5-minute tier.
+
+### Two details worth knowing
+
+- **Cache reads dominate a long session.** In practice more than 95% of prompt-side tokens are cache hits, so `cacheRead` moves the total far more than `output` does. A cache-hit rate that is off by a factor of five changes the estimate more than any other mistake.
 - **A model id must match exactly.** The id comes from the `assistant/message` event's model identity, which is what the provider adapter reports — usually the same string shown in the model picker.
 
 ## How the numbers are computed
 
-The Host half folds every `assistant/message` event that carries `usage` into buckets keyed by **local day × model**:
+The Host half folds every `assistant/message` event that carries `usage` into buckets keyed by **local day × model × tariff**:
 
 ```
 uncachedInput += usage.inputTokens
@@ -88,7 +146,13 @@ Live sessions are folded incrementally: only the new tail of the log is read on 
 
 The summary is served as JSON on the configured route, and the Client half polls it every 4 seconds while the plugin is loaded.
 
-Cost is `(uncachedInput × input + cacheRead × cacheRead + cacheWrite × cacheWrite + output × output) / 1e6`, summed per model.
+Cost is computed per bucket, then combined:
+
+```
+peak = uncachedInput_p × input + cacheRead_p × cacheRead + cacheWrite_p × cacheWrite + output_p × output
+off  = uncachedInput_o × input + cacheRead_o × cacheRead + cacheWrite_o × cacheWrite + output_o × output
+cost = (peak + off × offPeakRatio) / 1e6
+```
 
 ## Limitations
 
